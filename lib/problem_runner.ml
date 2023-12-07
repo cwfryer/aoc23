@@ -15,44 +15,46 @@ module Run_mode = struct
     | Submit of { credentials : Credentials.t }
 
   let read_file (filename : string) : string =
-    let ch = open_in_bin filename in
-    let s = really_input_string ch (in_channel_length ch) in
-    close_in ch;
+    let ch = Stdlib.open_in_bin filename in
+    let s = Stdlib.really_input_string ch (Stdlib.in_channel_length ch) in
+    Stdlib.close_in ch;
     s
 
   let write_file (filename : string) (contents : string) : unit =
-    let ch = open_out_bin filename in
-    let () = output_string ch contents in
-    close_out ch
+    let ch = Stdlib.open_out_bin filename in
+    let () = Stdlib.output_string ch contents in
+    Stdlib.close_out ch
 
   let get_puzzle_input (year : int) (day : int)
       (credentials : Credentials.t option) : (string, string) result =
     (* Create cache directory structure *)
     let () =
-      if not (Sys.file_exists "inputs") then Sys.mkdir "inputs" 0o777 else ()
+      if not (Stdlib.Sys.file_exists "inputs") then
+        Stdlib.Sys.mkdir "inputs" 0o777
+      else ()
     in
     let year_dir = Filename.concat "inputs" @@ string_of_int year in
     let () =
-      if not (Sys.file_exists year_dir) then Sys.mkdir year_dir 0o777 else ()
+      if not (Stdlib.Sys.file_exists year_dir) then
+        Stdlib.Sys.mkdir year_dir 0o777
+      else ()
     in
 
     (* Check if cached input exists *)
-    let filename =
-      Filename.concat year_dir @@ Format.sprintf "%02d.txt" day
-    in
-    if Sys.file_exists filename then Ok (read_file filename)
+    let filename = Filename.concat year_dir @@ Format.sprintf "%02d.txt" day in
+    if Stdlib.Sys.file_exists filename then Ok (read_file filename)
       (* If not, fetch it from adventofcode.com *)
     else
       match credentials with
       | None ->
           Error "Cannot fetch input from adventofcode.com: missing credentials."
       | Some credentials ->
-          Result.map_error Piaf.Error.to_string
+          Stdlib.Result.map_error Piaf.Error.to_string
           @@ Lwt_main.run
           @@
           let uri =
             Uri.of_string
-            @@ String.concat "/"
+            @@ Stdlib.String.concat "/"
                  [
                    "https://adventofcode.com";
                    string_of_int year;
@@ -78,12 +80,12 @@ module Run_mode = struct
     match run_mode with
     | Test_from_puzzle_input _ -> Ok None
     | Submit { credentials } ->
-        Result.map_error Piaf.Error.to_string
+        Stdlib.Result.map_error Piaf.Error.to_string
         @@ Lwt_main.run
         @@
         let uri =
           Uri.of_string
-          @@ String.concat "/"
+          @@ Stdlib.String.concat "/"
                [
                  "https://adventofcode.com";
                  string_of_int year;
@@ -123,10 +125,10 @@ let run_problem (module Problem : Problem.T) (run_mode : Run_mode.t)
   in
   Ok result
 
-let find_problem (year : int) (day : int) :
-    ((module Problem.T), string) result =
+let find_problem (year : int) (day : int) : ((module Problem.T), string) result
+    =
   match
-    List.find_opt
+    Stdlib.List.find_opt
       (fun (module Problem : Problem.T) ->
         Problem.year = year && Problem.day = day)
       Problems.All.all
@@ -134,8 +136,8 @@ let find_problem (year : int) (day : int) :
   | Some p -> Ok p
   | None ->
       Error
-        (Format.sprintf "Problem (year = %d, day = %d) not implemented."
-           year day)
+        (Format.sprintf "Problem (year = %d, day = %d) not implemented." year
+           day)
 
 let run (options : Options.t) : (string, string) result =
   let@ problem = find_problem options.year options.day in

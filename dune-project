@@ -24,6 +24,7 @@
   reason
   dune
   (cmdliner(>= 1.2.0))
+  (core(>= 0.15.0))
   (piaf (>= 0.1.0))
   (fmt (>= 0.9.0)))
  (tags ("advent-of-code")))
