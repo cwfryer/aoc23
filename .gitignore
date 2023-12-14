@@ -5,4 +5,4 @@ inputs/
 .git/
 .DS_Store
 .envrc
-
+.direnv
