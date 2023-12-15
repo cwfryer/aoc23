@@ -23,6 +23,7 @@
         utop = "*";
         dune-release = "*";
         core = "*";
+        angstrom = "*";
       };
       query =
         devPackagesQuery

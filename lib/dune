@@ -7,7 +7,7 @@
  (name import)
  (wrapped false)
  (modules import let fn)
- (libraries core fmt lwt str))
+ (libraries core fmt lwt str angstrom))
 
 (library
  (name problem)

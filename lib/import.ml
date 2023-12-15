@@ -1,9 +1,21 @@
 include Core
 include Let
 include Fn
-include Str
 
 let ( << ) f g x = f (g x)
+
+module Int = struct
+  include Int
+
+  let sum (xs : int list) : int = List.fold_left xs ~init:0 ~f:( + )
+  let product (xs : int list) : int = List.fold_left xs ~init:1 ~f:( * )
+
+  let maximum (xs : int list) : int =
+    List.fold_left xs ~f:max ~init:Int.min_value
+
+  let minimum (xs : int list) : int =
+    List.fold_left xs ~f:min ~init:Int.max_value
+end
 
 module Table = struct
   module Map = Stdlib.Map
@@ -118,4 +130,45 @@ module Table = struct
             m2)
         ~init:empty es
   end
+end
+
+module Angstrom = struct
+  include Angstrom
+
+  let unsigned_int : int t =
+    int_of_string <$> take_while1 @@ function '0' .. '9' -> true | _ -> false
+
+  let negative_int : int t =
+    let* _ = char '-' in
+    let* n = unsigned_int in
+    return (-n)
+
+  let signed_int : int t = unsigned_int <|> negative_int
+
+  let lowercase_ascii : char t =
+    choice
+    @@ List.init 26 ~f:(fun x -> char @@ char_of_int (x + int_of_char 'a'))
+
+  let uppercase_ascii : char t =
+    choice
+    @@ List.init 26 ~f:(fun x -> char @@ char_of_int (x + int_of_char 'A'))
+
+  let ascii_letter : char t = uppercase_ascii <|> lowercase_ascii
+
+  let lowercase_hex : char t =
+    choice (List.init 6 ~f:(fun x -> char @@ char_of_int (x + int_of_char 'a')))
+    <|> choice
+          (List.init 10 ~f:(fun x -> char @@ char_of_int (x + int_of_char '0')))
+
+  let hex_nibble : int t =
+    let* c = lowercase_hex in
+    match c with
+    | '0' .. '9' as c -> return @@ (int_of_char c - int_of_char '0')
+    | 'a' .. 'f' as c -> return @@ (int_of_char c - int_of_char 'a' + 10)
+    | c -> fail @@ Fmt.str "Invalid hex nibble: '%c'" c
+
+  let hex_byte : int t =
+    let* high = hex_nibble in
+    let* low = hex_nibble in
+    return @@ ((high lsl 4) lor low)
 end
