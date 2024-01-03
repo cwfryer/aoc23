@@ -4,21 +4,23 @@ let day = 1
 module Part_1 = struct
   let run (input : string) : (string, string) result =
     let numbers =
-      input |> String.split_on_char '\n'
+      input
+      |> String.split_on_char '\n'
       |> List.filter (fun s -> String.length s > 0)
       |> List.map Core.String.to_list
       |> List.map (List.filter (fun c -> Core.Char.is_digit c))
       |> List.map (fun (xs : char list) ->
-             match Core.List.(hd xs, last xs) with
-             | None, None -> failwith "Empty list"
-             | None, Some _ -> failwith "Illegal state"
-             | Some f, None -> [ f; f ]
-             | Some f, Some l -> [ f; l ])
+        match Core.List.(hd xs, last xs) with
+        | None, None -> failwith "Empty list"
+        | None, Some _ -> failwith "Illegal state"
+        | Some f, None -> [ f; f ]
+        | Some f, Some l -> [ f; l ])
       |> List.map Core.String.of_list
       |> List.map int_of_string
       |> Core.List.fold ~init:0 ~f:( + )
     in
     Ok (string_of_int @@ numbers)
+  ;;
 end
 
 module Part_2 = struct
@@ -39,6 +41,7 @@ module Part_2 = struct
       | [] -> '0'
     in
     aux (Base.String.to_list s)
+  ;;
 
   let last_digit s =
     let rec aux chars =
@@ -57,10 +60,12 @@ module Part_2 = struct
       | [] -> '0'
     in
     aux (Base.String.to_list (Base.String.rev s))
+  ;;
 
   let run (input : string) : (string, string) result =
     let numbers =
-      input |> String.split_on_char '\n'
+      input
+      |> String.split_on_char '\n'
       |> List.filter (fun s -> String.length s > 0)
       |> List.map (fun (s : string) -> [ first_digit s; last_digit s ])
       |> List.map Core.String.of_list
@@ -68,4 +73,5 @@ module Part_2 = struct
       |> Core.List.fold ~init:0 ~f:( + )
     in
     Ok (string_of_int @@ numbers)
+  ;;
 end
