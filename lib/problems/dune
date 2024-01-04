@@ -9,4 +9,4 @@
 
 (library
  (name problems)
- (libraries angstrom import problem))
+ (libraries angstrom import problem re))

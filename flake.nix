@@ -24,6 +24,7 @@
         dune-release = "*";
         core = "*";
         angstrom = "*";
+        re = "*";
       };
       query =
         devPackagesQuery
