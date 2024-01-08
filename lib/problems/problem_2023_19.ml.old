@@ -1,0 +1,382 @@
+open Import
+
+let year = 2023
+let day = 19
+
+module Part = struct
+  type t =
+    { x : int
+    ; m : int
+    ; a : int
+    ; s : int
+    }
+
+  let score t = t.x + t.m + t.a + t.s
+end
+
+type endpoint =
+  | Accepted
+  | Rejected
+
+type condition = string * char * int * string
+type check = Part.t -> string
+
+module Instructions = struct
+  type t = (string, check) Hashtbl.t
+
+  let init : t = Hashtbl.create ~size:1024 (module String)
+
+  let process_instructions (table : t) (part : Part.t) : endpoint =
+    let rec go label part =
+      let instruction =
+        match Hashtbl.find table label with
+        | Some x -> x
+        | None -> failwith "Invalid key"
+      in
+      match instruction part with
+      | "A" -> Accepted
+      | "R" -> Rejected
+      | next -> go next part
+    in
+    go "in" part
+  ;;
+end
+
+module Angstrom = struct
+  include Angstrom
+
+  let condition : condition t =
+    let* element = take 1 in
+    let* sign = take 1 in
+    let sign = Char.of_string sign in
+    let* value = unsigned_int in
+    let* _ = char ':' in
+    let* destination = many1 ascii_letter in
+    let destination = String.of_list destination in
+    let* _ = char ',' in
+    return (element, sign, value, destination)
+  ;;
+
+  let instruction : (string * check) t =
+    let* label = take_till (fun c -> Char.equal c '{') in
+    let* _ = char '{' in
+    let* conditions = many1 condition in
+    let* fallback = take_till (fun c -> Char.equal c '}') in
+    let* _ = char '}' in
+    let* _ = char '\n' in
+    let check (p : Part.t) : string =
+      match
+        List.fold (List.rev conditions) ~init:None ~f:(fun acc (el, sign, value, dest) ->
+          let elm =
+            match el with
+            | "x" -> p.x
+            | "m" -> p.m
+            | "a" -> p.a
+            | "s" -> p.s
+            | _ -> failwith "Invalid part record"
+          in
+          match sign with
+          | '>' -> if elm > value then Some dest else acc
+          | '<' -> if elm < value then Some dest else acc
+          | _ -> failwith "Invalid sign in instruction")
+      with
+      | None -> fallback
+      | Some x -> x
+    in
+    return (label, check)
+  ;;
+
+  let instructions : (string, check) Hashtbl.t t =
+    let* instruction_list = many1 instruction in
+    let hm = Hashtbl.of_alist_exn (module String) instruction_list in
+    return hm
+  ;;
+
+  let measure =
+    let* l = any_char in
+    let* _ = char '=' in
+    let* v = unsigned_int in
+    return (l, v)
+  ;;
+
+  let part =
+    let* _ = char '{' in
+    let* measures = sep_by1 (char ',') measure in
+    let* _ = char '}' in
+    let* _ = char '\n' in
+    let part =
+      List.fold measures ~init:{ Part.x = 0; m = 0; a = 0; s = 0 } ~f:(fun acc (l, v) ->
+        match l with
+        | 'x' -> { acc with x = v }
+        | 'm' -> { acc with m = v }
+        | 'a' -> { acc with a = v }
+        | 's' -> { acc with s = v }
+        | _ -> failwith "Got invalid label for part")
+    in
+    return part
+  ;;
+
+  let parts = many1 part
+
+  let document =
+    let* instructions = instructions in
+    let* _ = char '\n' in
+    let* parts = parts in
+    return (instructions, parts)
+  ;;
+end
+
+module Part_1 = struct
+  let run (input : string) : (string, string) Result.t =
+    let@ document = Angstrom.(parse_string ~consume:All document input) in
+    let instructions, parts = document in
+    let accepted, _rejected =
+      List.fold parts ~init:([], []) ~f:(fun (acc, rej) part ->
+        match Instructions.process_instructions instructions part with
+        | Accepted -> part :: acc, rej
+        | Rejected -> acc, part :: rej)
+    in
+    let answer =
+      accepted
+      |> List.map ~f:(fun p -> Part.score p)
+      |> List.fold ~init:0 ~f:( + )
+      |> Int.to_string
+    in
+    Ok answer
+  ;;
+end
+
+(* types to represent the workflows *)
+type node = string
+
+type decision =
+  | Accept
+  | Reject
+
+type op =
+  | LT
+  | GT
+
+(* result can be an accept/reject decision or another workflow (node) *)
+type result =
+  | Node of node
+  | Decision of decision
+
+(* conditional phrase: reg `op` cnst -> res; reg = "register", i.e., x, m, a, or s *)
+type cond =
+  { op : op
+  ; reg : node
+  ; cnst : int
+  ; res : result
+  }
+
+let print_cond c : unit =
+  let op =
+    match c.op with
+    | LT -> "<"
+    | GT -> ">"
+  in
+  let res =
+    match c.res with
+    | Decision Accept -> "A"
+    | Decision Reject -> "R"
+    | Node n -> n
+  in
+  Stdio.printf "%s %s %n : %s\n" c.reg op c.cnst res
+;;
+
+(* a workflow has a final "else" branch as well as a series of conditional phrases *)
+type workflow =
+  { final : result
+  ; conds : cond list
+  }
+
+type binding =
+  { x : int
+  ; m : int
+  ; a : int
+  ; s : int
+  }
+
+module M = Stdlib.Map.Make (String)
+
+module Angstrom' = struct
+  include Angstrom
+
+  let condition : cond t =
+    let* reg = take 1 in
+    let* op = char '>' <|> char '<' in
+    let op =
+      match op with
+      | '<' -> LT
+      | '>' -> GT
+      | _ -> failwith "Invalid sign in input"
+    in
+    let* cnst = unsigned_int in
+    let* _ = char ':' in
+    let* res = many1 ascii_letter in
+    let res =
+      let res = String.of_list res in
+      match res with
+      | "A" -> Decision Accept
+      | "R" -> Decision Reject
+      | x -> Node x
+    in
+    let* _ = char ',' in
+    let cond = { op; reg; cnst; res } in
+    (* print_cond cond; *)
+    return cond
+  ;;
+
+  let workflow =
+    let* name = take_till (fun c -> Char.equal '{' c) in
+    let* _ = char '{' in
+    let* conds = many1 condition in
+    let* final = take_till (fun c -> Char.equal '}' c) in
+    let final =
+      match final with
+      | "A" -> Decision Accept
+      | "R" -> Decision Reject
+      | x -> Node x
+    in
+    let* _ = char '}' in
+    let* _ = char '\n' in
+    return (name, { final; conds })
+  ;;
+
+  let workflows = many1 workflow
+
+  let measure =
+    let* l = any_char in
+    let* _ = char '=' in
+    let* v = unsigned_int in
+    return (l, v)
+  ;;
+
+  let part =
+    let* _ = char '{' in
+    let* measures = sep_by1 (char ',') measure in
+    let* _ = char '}' in
+    let* _ = char '\n' in
+    let part =
+      List.fold measures ~init:{ Part.x = 0; m = 0; a = 0; s = 0 } ~f:(fun acc (l, v) ->
+        match l with
+        | 'x' -> { acc with x = v }
+        | 'm' -> { acc with m = v }
+        | 'a' -> { acc with a = v }
+        | 's' -> { acc with s = v }
+        | _ -> failwith "Got invalid label for part")
+    in
+    return part
+  ;;
+
+  let parts = many1 part
+
+  let document =
+    let* workflows = workflows in
+    let workflows = Map.of_alist_exn (module String) workflows in
+    let* _ = char '\n' in
+    let* parts = parts in
+    return (workflows, parts)
+  ;;
+end
+
+let index_binding reg binding =
+  match reg with
+  | "x" -> binding.x
+  | "m" -> binding.m
+  | "a" -> binding.a
+  | "s" -> binding.s
+  | _ -> failwith "Invalid element"
+;;
+
+let eval_cond bind cond =
+  match cond.op with
+  | LT -> index_binding cond.reg bind < cond.cnst
+  | GT -> index_binding cond.reg bind > cond.cnst
+;;
+
+let func_of_cond cond x =
+  match cond.op with
+  | LT -> x < cond.cnst
+  | GT -> x > cond.cnst
+;;
+
+let update_unsafe mupdate key mp ~f =
+  mupdate
+    key
+    (fun x_opt ->
+      match x_opt with
+      | None -> failwith "update_unsafe"
+      | Some x -> Some (f x))
+    mp
+;;
+
+let count_paths wfs =
+  let rec count_paths' filterfuncs res =
+    match res with
+    | Decision Reject -> 0
+    | Decision Accept ->
+      let max_rng = 4000 in
+      let inp_rng = Seq.ints 1 |> Seq.take max_rng in
+      let counter l = inp_rng |> Seq.filter (Map.find_exn filterfuncs l) |> Seq.length in
+      counter "x" + counter "m" + counter "a" + counter "s"
+    | Node name ->
+      (* we've been sent to another workflow *)
+      let wf = Map.find_exn wfs name in
+      let counts, elsefuncs =
+        (* for each conditional of the current workflow *)
+        wf.conds
+        |> Stdlib.List.fold_left
+             (fun (count, filters) cond ->
+               (* function that screens register values according to the
+                  conditional described by cond *)
+               let condfunc = func_of_cond cond in
+               let cur_filterfuncs =
+                 Map.update
+                   filters
+                   cond.reg
+                   (* all preceding conditionals must succeed, as must the current one *)
+                   ~f:(fun filterfunc x ->
+                     match filterfunc with
+                     | Some f -> f x && condfunc x
+                     | None -> failwith "unsafe_update")
+               in
+               let cur_counts = count_paths' cur_filterfuncs cond.res in
+               (* now consider the branch where the conditional failed. this branch
+                  filters on not (condfunc x) *)
+               let next_filterfuncs =
+                 Map.update
+                   filters
+                   cond.reg
+                   (* all preceding conditionals must succeed, as must the current one *)
+                   ~f:(fun filterfunc x ->
+                     match filterfunc with
+                     | Some f -> f x && not (condfunc x)
+                     | None -> failwith "unsafe_update")
+               in
+               (* counts scale additively here because we are partitioning the count
+                  among the edges of our tree *)
+               count + cur_counts, next_filterfuncs)
+             (0, filterfuncs)
+      in
+      (* consider the case where all of the conditionals are false *)
+      let elsecount = count_paths' elsefuncs wf.final in
+      counts + elsecount
+  in
+  let truefn _ = true in
+  let filters =
+    [ "x", truefn; "m", truefn; "a", truefn; "s", truefn ]
+    |> Map.of_alist_exn (module String)
+  in
+  count_paths' filters (Node "in")
+;;
+
+module Part_2 = struct
+  let run (input : string) : (string, string) Result.t =
+    let@ document = Angstrom'.(parse_string ~consume:All document input) in
+    let wfs, _ = document in
+    let answer = count_paths wfs |> Int.to_string in
+    Ok answer
+  ;;
+end
